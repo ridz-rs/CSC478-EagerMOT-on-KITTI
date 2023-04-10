@@ -1,0 +1,9 @@
+filterpy
+glob2
+more-itertools
+numba
+numpy
+Pillow
+pyquaternion
+scipy
+shap

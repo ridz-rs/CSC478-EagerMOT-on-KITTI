@@ -1,0 +1,1 @@
+Store GPS/IMU training data from KITTI here (https://www.cvlibs.net/datasets/kitti/eval_tracking.php)

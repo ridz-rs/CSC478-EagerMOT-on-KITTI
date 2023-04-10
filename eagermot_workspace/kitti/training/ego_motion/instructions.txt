@@ -1,0 +1,1 @@
+Store ego_motion training data here. (https://drive.google.com/drive/folders/1MpAa9YErhAZNEJjIrC4Ky21YfNj2jatM?usp=sharing)
