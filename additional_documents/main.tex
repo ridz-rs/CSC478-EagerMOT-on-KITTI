@@ -1,0 +1,105 @@
+\documentclass{article}
+
+
+% if you need to pass options to natbib, use, e.g.:
+%     \PassOptionsToPackage{numbers, compress}{natbib}
+% before loading neurips_2022
+
+
+% ready for submission
+\usepackage{neurips_2022}
+
+
+% to compile a preprint version, e.g., for submission to arXiv, add add the
+% [preprint] option:
+%     \usepackage[preprint]{neurips_2022}
+
+
+% to compile a camera-ready version, add the [final] option, e.g.:
+%     \usepackage[final]{neurips_2022}
+
+
+% to avoid loading the natbib package, add option nonatbib:
+%    \usepackage[nonatbib]{neurips_2022}
+
+
+\usepackage[utf8]{inputenc} % allow utf-8 input
+\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+\usepackage{hyperref}       % hyperlinks
+\usepackage{url}            % simple URL typesetting
+\usepackage{booktabs}       % professional-quality tables
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{microtype}      % microtypography
+\usepackage{xcolor}         % colors
+
+
+
+\title{CSC478 Project Report}
+
+
+% The \author macro works with any number of authors. There are two commands
+% used to separate the names and addresses of multiple authors: \And and \AND.
+%
+% Using \And between authors leaves it to LaTeX to determine where to break the
+% lines. Using \AND forces a line break at that point. So, if LaTeX puts 3 of 4
+% authors names on the first line, and the last on the second line, try using
+% \AND instead of \And before the third author name.
+
+\begin{document}
+
+
+\maketitle
+
+
+\begin{abstract}
+Multi-Object tracking (MOT) is a growing field and important for advancements in popular tech such as autonomous driving systems. I attempt to implement a robust MOT method \cite{Kim21ICRA} on the KITTIMOT test set \cite{Geiger2012CVPR}
+and try to study the impacts of the second data association step outlined by EagerMOT.
+\end{abstract}
+
+
+\section{Introduction}
+Multi-object tracking (MOT) enables mobile robots to perform well-informed motion planning and navigation by localizing surrounding objects in 3D space and time. Majority of existing research in this field takes place on data from depth sensors (eg. LiDAR) while current state-of-the-art results like those achieved by EagerMOT \cite{Kim21ICRA} which uses a fusion of LiDAR and camera data. This is done in order to achieve a larger sensing range by leveraging detections in image space while also leveraging LiDAR detections for a higher recall. Using images allows identification of distant incoming objects, while depth estimates allow for precise trajectory localization as soon as objects are within the depth-sensing range. \cite{Kim21ICRA} can be divided into the following rough steps:
+\begin{itemize}
+    \item Object detection in 2D and 3D spaces followed by the fusion of these detections based on 2D overlap.
+    \item Fused instances then go through a two staged matching process to update their tracks using 3D and/or 2D information.
+    \item An object’s track life cycle is determined by a set of simple rules to determine whether to keep or discard an object’s track. 
+\end{itemize}
+ 
+In my project proposal, I proposed improvements in detections, implementing better filtering and better fusion methods. While I was able to implement a high performing version of EagerMOT by using FusionMOT RRC \cite{luiten2019track}, TrackRCNN  \cite{Voigtlaender19CVPR_MOTS} for the 2D detections and PointGNN \cite{Point-GNN} for the 3D detections. I attempted to integrate an extended Kalmann filter while also including imu data provided by KITTI \cite{Geiger2012CVPR},
+however I ran into some roadblocks that I will describe here. 
+
+
+\section{Attempted Methods}
+\subsection{Detection and Tracking}
+For the KITTI dataset, we first use ego motion estimates in order to convert the coordinates to world coordinates. The conversion files are provided by the authors of EagerMOT \cite{Kim21ICRA}. I perform all evaluations on the KITTIMOT\cite{Geiger2012CVPR} testing set as training/validation segmentations are unavailable for trackRCNN \cite{luiten2019track}
+and requires large computing resources in order to generate. This however doesn't negatively impact the research as the testing set has significantly more data points than the training set and is used by other comparable methods to set benchmark metrics.\\\\
+The 2D detections from trackRCNN\cite{luiten2019track}+RRC\cite{Voigtlaender19CVPR_MOTS} and the 3D detections from PointGNN \cite{Point-GNN} are then fused by tracing around the intersection of their detections. A 3D detections corresponds to a 2D detection if their IoU is at least (0.1, 0.1) when they are both projected in 2D space.\\\\
+Once new detections are made, respective tracks are initialized using a Kalman filter(with a constant velocity model). The "track" is simply a prediction of where the detection should appear next. The detections then go through two association stages where each detection is associated to a track. The first association is done in 3D space using greedy matching. The score used to match a detection to its track in 3d space is the one described in EagerMOT\cite{Kim21ICRA} called "scaled distance" which is defined as Euclidian distance * cosinedistance(orientations). \\\\
+A second data association step takes place in 2D by taking unmatched tracks from the first association step and trying to assign detections to them in 2D space. This is done to improve performance of far-off objects as they are more detectable in 2D space than 3D, as well as to account for any occlusions or disturbances in the 3D detections. These associations are done using greedy matching on 2D IoU. The following observation depicts the improvements achieved by using a second stage on the KITTIMOTS \cite{Geiger2012CVPR} testing dataset. 
+
+\begin{center}
+\begin{tabular}{ c c c }
+ Table I \\ 
+ Matched Tracks after 1st Association &  1949\\  
+Unmatched Tracks after 1st Association& 934 &\\ 
+Matched Tracks after 2nd Association & 196\\
+Unmatched Tracks after 2nd Association & 738
+\end{tabular}
+\end{center}
+
+As we can see, the first association step left 1949 tracks unmatched, out of which 196 were recovered by the second association step, clearly showing merit in the two stage approach.
+
+
+\subsection{Filtering (Incomplete)}
+As proposed in my Project Proposal, I explored methods to improve the filtering done for track initialization and parametrization. The original paper \cite{Kim21ICRA} uses a kalman filter with linear dynamics that takes into consideration only the visually observed position and orientation changes. Since KITTI is a dataset with moving vehicles and people, it makes sense to upgrade the filtering method to take into account non linear dynamic modelling. I attempted to do this by integrating an extended Kalman filter that includes information from the IMU of the system collecting data for the KITTIMOTs dataset \cite{Geiger2012CVPR}. The IMU provides latitude+longitude data which is used to provide more accurate x-y world coordinates. We also use acceleration and angular rate from the IMU in our state estimation.\\\\
+I however ran into a roadblock in the integration step of the extended kalman filter during updating the state vector for the tracking system. The previous scoring function expects a 7D state vector to assign "scaled distance" based on which the first data association is done. The introduction of additional variables from the IMU in the state vector requires the design of a new scoring function that suits our purposes as well as modifications to other structures that need to be adjusted to the new state representation. I ran out of time and so, while the extended kalman filter class using the IMU data is set up, it isn't integrated into my implementation of EagerMOT.
+
+\section{Conclusion}
+I was able to recreate the best results claimed to be achieved by EagerMOT \cite{Kim21ICRA} on the KITTI dataset. However the results still struggle with pedestrians and crowded scenes. My inference is that this is due to weak association metrics such as using greedy matching with IoU that causes problems when targets are very close to each other causing "overlapping" observations that break the greedy matching over IoU. The use of linear dynamics in the Kalman filter also seems like a error prone method for predicting future object tracks. An extended Kalman filter or transformer based network to make the track predictions could lead to better results.\\\\
+The simple yet effective template laid out by EagerMOT leaves room for much improvement and possible further research on real data-sets such as KITTI \cite{Geiger2012CVPR}
+
+\bibliographystyle{plain}
+\bibliography{refs}
+
+\end{document}
